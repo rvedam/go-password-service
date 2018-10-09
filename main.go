@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rvedam/go-password-service/hashers"
+	"github.com/rvedam/go-password-service/hashlib"
 )
 
 func main() {
@@ -12,5 +12,5 @@ func main() {
 		fmt.Println("USAGE: ./go-password-service <password>")
 		return
 	}
-	fmt.Println(passwords.Hash512AndEncodeBase64(os.Args[1]))
+	fmt.Println(hashlib.Hash512AndEncodeBase64(os.Args[1]))
 }

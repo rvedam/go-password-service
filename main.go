@@ -2,15 +2,24 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"log"
+	"net/http"
+	"time"
 
 	"github.com/rvedam/go-password-service/hashlib"
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("USAGE: ./go-password-service <password>")
-		return
+func computePasswordHash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+
+	} else {
+		r.ParseForm()
+		fmt.Fprintln(w, hashlib.Hash512AndEncodeBase64(r.Form.Get("password")))
+		time.Sleep(5 * time.Second)
 	}
-	fmt.Println(hashlib.Hash512AndEncodeBase64(os.Args[1]))
+}
+
+func main() {
+	http.HandleFunc("/hash", computePasswordHash)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

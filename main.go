@@ -1,25 +1,30 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
-	"github.com/rvedam/go-password-service/hashlib"
+	"github.com/rvedam/go-password-service/server"
 )
 
-func computePasswordHash(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-
-	} else {
-		r.ParseForm()
-		fmt.Fprintln(w, hashlib.Hash512AndEncodeBase64(r.Form.Get("password")))
-		time.Sleep(5 * time.Second)
-	}
-}
-
 func main() {
-	http.HandleFunc("/hash", computePasswordHash)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	stop := make(chan bool, 1)
+
+	srv := &http.Server{Addr: ":8080", Handler: http.DefaultServeMux}
+	go func() {
+		<-stop
+		log.Println("Shutting down server...")
+		if err := srv.Shutdown(context.Background()); err != nil {
+			log.Fatalf("Could not shutdown gracefully: %v\n", err)
+		}
+	}()
+	http.HandleFunc("/hash", server.ComputePasswordHash)
+	http.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, http.StatusOK)
+		stop <- true
+	})
+	log.Fatal(srv.ListenAndServe())
+
 }

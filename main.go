@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/rvedam/go-password-service/server"
 )
@@ -12,19 +12,16 @@ import (
 func main() {
 	stop := make(chan bool, 1)
 
-	srv := &http.Server{Addr: ":8080", Handler: http.DefaultServeMux}
+	srv := &http.Server{Addr: ":8080", Handler: server.NewServer(stop)}
 	go func() {
 		<-stop
 		log.Println("Shutting down server...")
-		if err := srv.Shutdown(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
 			log.Fatalf("Could not shutdown gracefully: %v\n", err)
 		}
 	}()
-	http.HandleFunc("/hash", server.ComputePasswordHash)
-	http.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, http.StatusOK)
-		stop <- true
-	})
 	log.Fatal(srv.ListenAndServe())
 
 }

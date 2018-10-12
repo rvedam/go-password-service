@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/rvedam/go-password-service/hashlib"
@@ -15,75 +17,104 @@ type Stats struct {
 }
 
 type Server struct {
-	totalrequests  chan int
-	totaltime      chan int64
-	stop           chan bool
-	mux            *http.ServeMux
-	stats_request  chan int
-	incoming_stats chan Stats
+	totalrequests chan int
+	totaltime     chan time.Duration
+	stop          chan bool
+	mux           *http.ServeMux
+	statsrequest  chan int
+	incomingstats chan Stats
+	wg            sync.WaitGroup
 }
 
+type managerChannels struct {
+	totalRequests     <-chan int
+	totalTimeChan     <-chan time.Duration
+	statsRequestChan  <-chan int
+	incomingStatsChan chan Stats
+	stop              <-chan bool
+}
+
+func computeStats(mgr managerChannels) {
+	totalPasswordRequests := 0
+	var totalTime time.Duration
+	for {
+		select {
+		case c := <-mgr.totalRequests:
+			fmt.Println(c)
+			totalPasswordRequests += c
+		case requestTime := <-mgr.totalTimeChan:
+			totalTime += requestTime
+		case <-mgr.statsRequestChan:
+			var avg int64
+			if totalPasswordRequests > 0 {
+				avg = (totalTime.Nanoseconds() / int64(totalPasswordRequests)) * 1000
+			} else {
+				avg = 0
+			}
+			mgr.incomingStatsChan <- Stats{Total: totalPasswordRequests, Average: avg}
+		case <-mgr.stop:
+			return
+		}
+	}
+}
+
+// NewServer generates a new http server with our password service
 func NewServer(stop chan bool) *Server {
 	mux := http.NewServeMux()
-	total_request_chan := make(chan int, 100)
-	total_time_chan := make(chan int64, 100)
-	stats_request_chan := make(chan int, 100)
-	incoming_stats_chan := make(chan Stats, 100)
-
+	totalRequestChan := make(chan int, 100)
+	totalTimeChan := make(chan time.Duration, 100)
+	statsRequestChan := make(chan int, 100)
+	incomingStatsChan := make(chan Stats, 100)
+	mgr := managerChannels{
+		totalRequests:     totalRequestChan,
+		totalTimeChan:     totalTimeChan,
+		statsRequestChan:  statsRequestChan,
+		incomingStatsChan: incomingStatsChan,
+		stop:              stop,
+	}
 	s := &Server{
-		totalrequests:  total_request_chan,
-		totaltime:      total_time_chan,
-		stats_request:  stats_request_chan,
-		incoming_stats: incoming_stats_chan,
-		stop:           stop,
-		mux:            mux,
+		totalrequests: totalRequestChan,
+		totaltime:     totalTimeChan,
+		statsrequest:  statsRequestChan,
+		incomingstats: incomingStatsChan,
+		stop:          stop,
+		mux:           mux,
 	}
 
-	go func() {
-		total_passwd_requests := 0
-		totalTime := int64(0)
-		for {
-			select {
-			case c := <-total_request_chan:
-				fmt.Println(c)
-				total_passwd_requests += c
-			case request_time := <-total_time_chan:
-				totalTime += request_time
-			case <-stats_request_chan:
-				incoming_stats_chan <- Stats{Total: total_passwd_requests, Average: totalTime}
-			case <-stop:
-				return
-			}
-		}
-	}()
+	go computeStats(mgr)
 	s.mux.HandleFunc("/hash", s.computePasswordHash)
 	s.mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, http.StatusOK)
 		stop <- true
 	})
-	s.mux.HandleFunc("/stats", s.computeStats)
+	s.mux.HandleFunc("/stats", s.getStats)
 	return s
 }
 
 func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
-		s.totalrequests <- 1
-		fmt.Println("Another hash request...")
+		start := time.Now()
 		time.Sleep(5 * time.Second)
 		r.ParseForm()
-		fmt.Fprintln(w, hashlib.Hash512AndEncodeBase64(r.Form.Get("password")))
+		password := r.Form.Get("password")
+		hash := hashlib.Hash512AndEncodeBase64(password)
+		end := time.Since(start)
+		fmt.Fprintln(w, strings.TrimSpace(hash))
+		s.totalrequests <- 1
+		s.totaltime <- end
 	}
 }
 
-func (s *Server) computeStats(w http.ResponseWriter, r *http.Request) {
-	s.stats_request <- 1
-	data := <-s.incoming_stats
+func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
+	s.statsrequest <- 1
+	data := <-s.incomingstats
 	fmt.Println(data)
 	w.Header().Set("Content-type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(data)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.wg.Add(1)
 	s.mux.ServeHTTP(w, r)
 }

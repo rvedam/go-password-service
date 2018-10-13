@@ -99,9 +99,14 @@ func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second)
 		r.ParseForm()
 		password := r.Form.Get("password")
-		hash := hashlib.Hash512AndEncodeBase64(password)
+		if password == "" {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			hash := hashlib.Hash512AndEncodeBase64(password)
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprintln(w, strings.TrimSpace(hash))
+		}
 		end := time.Since(start)
-		fmt.Fprintln(w, strings.TrimSpace(hash))
 		s.totalrequests <- 1
 		s.totaltime <- end
 	} else {

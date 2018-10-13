@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/rvedam/go-password-service/server"
@@ -15,25 +12,21 @@ import (
 
 func main() {
 	stop := make(chan bool)
-	sigTerm := make(chan os.Signal, 1)
-
-	signal.Notify(sigTerm, os.Interrupt, syscall.SIGTERM)
 	srv := &http.Server{Addr: ":8080", Handler: server.NewServer(stop)}
 	go func() {
-		log.Fatal(srv.ListenAndServe())
-	}()
-
-	go func() {
-		<-stop
-		log.Println("Shutting down server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Fatalf("Could not shutdown gracefully: %v\n", err)
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			// Error starting or closing listener:
+			log.Printf("HTTP server ListenAndServe: %v", err)
 		}
 	}()
 
-	<-sigTerm
+	<-stop
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Could not shutdown gracefully: %v\n", err)
+	}
 
 	fmt.Println("Server shutdown complete")
 }

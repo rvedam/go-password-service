@@ -31,7 +31,7 @@ type managerChannels struct {
 	totalTimeChan     <-chan time.Duration
 	statsRequestChan  <-chan int
 	incomingStatsChan chan Stats
-	stop              <-chan bool
+	stop              chan bool
 }
 
 func computeStats(mgr managerChannels) {
@@ -53,6 +53,7 @@ func computeStats(mgr managerChannels) {
 			}
 			mgr.incomingStatsChan <- Stats{Total: totalPasswordRequests, Average: avg}
 		case <-mgr.stop:
+			mgr.stop <- true
 			return
 		}
 	}

@@ -40,7 +40,6 @@ func computeStats(mgr managerChannels) {
 	for {
 		select {
 		case c := <-mgr.totalRequests:
-			fmt.Println(c)
 			totalPasswordRequests += c
 		case requestTime := <-mgr.totalTimeChan:
 			totalTime += requestTime
@@ -85,7 +84,7 @@ func NewServer(stop chan bool) *Server {
 	go computeStats(mgr)
 	s.mux.HandleFunc("/hash", s.computePasswordHash)
 	s.mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, http.StatusOK)
+		w.WriteHeader(http.StatusOK)
 		stop <- true
 	})
 	s.mux.HandleFunc("/stats", s.getStats)
@@ -103,13 +102,14 @@ func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, strings.TrimSpace(hash))
 		s.totalrequests <- 1
 		s.totaltime <- end
+	} else {
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	s.statsrequest <- 1
 	data := <-s.incomingstats
-	fmt.Println(data)
 	w.Header().Set("Content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(data)

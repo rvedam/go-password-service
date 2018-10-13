@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rvedam/go-password-service/hashlib"
@@ -23,7 +22,6 @@ type Server struct {
 	mux           *http.ServeMux
 	statsrequest  chan int
 	incomingstats chan Stats
-	wg            sync.WaitGroup
 }
 
 type managerChannels struct {
@@ -116,6 +114,5 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.wg.Add(1)
 	s.mux.ServeHTTP(w, r)
 }

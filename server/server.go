@@ -44,7 +44,7 @@ func computeStats(mgr managerChannels) {
 		case <-mgr.statsRequestChan:
 			var avg int64
 			if totalPasswordRequests > 0 {
-				avg = (totalTime.Nanoseconds() / int64(totalPasswordRequests)) * 1000
+				avg = (totalTime.Nanoseconds() / (int64(totalPasswordRequests) * 1000))
 			} else {
 				avg = 0
 			}

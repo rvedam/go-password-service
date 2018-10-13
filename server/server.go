@@ -82,8 +82,12 @@ func NewServer(stop chan bool) *Server {
 	go computeStats(mgr)
 	s.mux.HandleFunc("/hash", s.computePasswordHash)
 	s.mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		stop <- true
+		if r.Method == "GET" {
+			w.WriteHeader(http.StatusOK)
+			stop <- true
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
 	})
 	s.mux.HandleFunc("/stats", s.getStats)
 	return s
@@ -106,11 +110,15 @@ func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
-	s.statsrequest <- 1
-	data := <-s.incomingstats
-	w.Header().Set("Content-type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(data)
+	if r.Method == "GET" {
+		s.statsrequest <- 1
+		data := <-s.incomingstats
+		w.Header().Set("Content-type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(data)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -11,12 +11,11 @@ import (
 )
 
 type Stats struct {
-	Total   int
-	Average int64
+	Total   int   `json:"total"`
+	Average int64 `json:"average"`
 }
 
 type Server struct {
-	totalrequests chan int
 	totaltime     chan time.Duration
 	stop          chan bool
 	mux           *http.ServeMux
@@ -25,10 +24,9 @@ type Server struct {
 }
 
 type managerChannels struct {
-	totalRequests     <-chan int
 	totalTimeChan     <-chan time.Duration
 	statsRequestChan  <-chan int
-	incomingStatsChan chan Stats
+	incomingStatsChan chan<- Stats
 	stop              chan bool
 }
 
@@ -37,9 +35,8 @@ func computeStats(mgr managerChannels) {
 	var totalTime time.Duration
 	for {
 		select {
-		case c := <-mgr.totalRequests:
-			totalPasswordRequests += c
 		case requestTime := <-mgr.totalTimeChan:
+			totalPasswordRequests++
 			totalTime += requestTime
 		case <-mgr.statsRequestChan:
 			var avg int64
@@ -59,19 +56,16 @@ func computeStats(mgr managerChannels) {
 // NewServer generates a new http server with our password service
 func NewServer(stop chan bool) *Server {
 	mux := http.NewServeMux()
-	totalRequestChan := make(chan int, 100)
 	totalTimeChan := make(chan time.Duration, 100)
 	statsRequestChan := make(chan int, 100)
 	incomingStatsChan := make(chan Stats, 100)
 	mgr := managerChannels{
-		totalRequests:     totalRequestChan,
 		totalTimeChan:     totalTimeChan,
 		statsRequestChan:  statsRequestChan,
 		incomingStatsChan: incomingStatsChan,
 		stop:              stop,
 	}
 	s := &Server{
-		totalrequests: totalRequestChan,
 		totaltime:     totalTimeChan,
 		statsrequest:  statsRequestChan,
 		incomingstats: incomingStatsChan,
@@ -94,8 +88,8 @@ func NewServer(stop chan bool) *Server {
 }
 
 func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	if r.Method == "POST" {
-		start := time.Now()
 		time.Sleep(5 * time.Second)
 		r.ParseForm()
 		password := r.Form.Get("password")
@@ -106,12 +100,11 @@ func (s *Server) computePasswordHash(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusCreated)
 			fmt.Fprintln(w, strings.TrimSpace(hash))
 		}
-		end := time.Since(start)
-		s.totalrequests <- 1
-		s.totaltime <- end
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}
+	end := time.Since(start)
+	s.totaltime <- end
 }
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
